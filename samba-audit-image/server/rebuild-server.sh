@@ -3,8 +3,8 @@ set -euo pipefail
 
 SERVER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-IMAGE_NAME="${IMAGE_NAME:-local/SambaServer:latest}"
-IMAGE_TAR="${IMAGE_TAR:-SambaServer-latest.tar}"
+IMAGE_NAME="${IMAGE_NAME:-local/samba-audit:latest}"
+IMAGE_TAR="${IMAGE_TAR:-samba-audit-latest.tar}"
 DEPLOYMENT="${DEPLOYMENT:-samba}"
 NAMESPACE="${NAMESPACE:-default}"
 APP_LABEL_KEY="${APP_LABEL_KEY:-app}"
@@ -97,15 +97,15 @@ if ! sudo k3s crictl inspecti "${IMAGE_NAME}" >/dev/null 2>&1; then
     fi
   fi
 
-  # Fallback: search containerd tags that end in "SambaServer:latest"
+  # Fallback: search containerd tags that end in "samba-audit:latest"
   if [[ -z "${IMPORTED_REF}" ]]; then
-    IMPORTED_REF="$(sudo k3s ctr -n k8s.io images ls -q | grep -E '(^|/)SambaServer:latest$' | head -n 1 || true)"
+    IMPORTED_REF="$(sudo k3s ctr -n k8s.io images ls -q | grep -E '(^|/)samba-audit:latest$' | head -n 1 || true)"
   fi
 
   if [[ -z "${IMPORTED_REF}" ]]; then
     echo "❌ ERROR: Could not determine imported image reference to tag as ${IMAGE_NAME}"
-    echo "Known containerd images matching 'SambaServer|local':"
-    sudo k3s ctr -n k8s.io images ls | grep -E 'SambaServer|local' || true
+    echo "Known containerd images matching 'samba-audit|local':"
+    sudo k3s ctr -n k8s.io images ls | grep -E 'samba-audit|local' || true
     exit 1
   fi
 
@@ -116,8 +116,8 @@ fi
 # Verify again (fail fast)
 if ! sudo k3s crictl inspecti "${IMAGE_NAME}" >/dev/null 2>&1; then
   echo "❌ ERROR: After import/tag, image still not found in containerd as: ${IMAGE_NAME}"
-  echo "Known containerd images matching 'SambaServer|local':"
-  sudo k3s ctr -n k8s.io images ls | grep -E 'SambaServer|local' || true
+  echo "Known containerd images matching 'samba-audit|local':"
+  sudo k3s ctr -n k8s.io images ls | grep -E 'samba-audit|local' || true
   exit 1
 fi
 
