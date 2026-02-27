@@ -89,6 +89,11 @@ Open **File Explorer** and type `\\<server_ip>` in the address bar.
 - `sudo` privileges
 - `samba`, `samba-common-bin`, `cifs-utils` (installed by `install_samba.sh`)
 
+## Uploading Your Own Project
+
+Want to replace the placeholder files with your actual Samba project?
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for copy-paste Git commands to upload your whole local directory.
+
 ## License
 
 MIT
