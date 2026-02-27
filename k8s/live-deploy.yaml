@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "17"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"name":"samba","namespace":"default"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"samba"}},"template":{"metadata":{"labels":{"app":"samba"}},"spec":{"containers":[{"args":["mkdir -p /data/samba;\nsmbd -F --no-process-group --configfile=/etc/samba/smb.conf\n"],"command":["/bin/sh","-c"],"image":"jash1976/samba-audit:latest","imagePullPolicy":"Always","name":"samba","readinessProbe":{"initialDelaySeconds":2,"periodSeconds":1,"tcpSocket":{"port":445}},"volumeMounts":[{"mountPath":"/data","name":"samba-data"},{"mountPath":"/etc/samba","name":"samba-config"}]}],"volumes":[{"name":"samba-data","persistentVolumeClaim":{"claimName":"samba-pvc"}},{"configMap":{"name":"samba-config"},"name":"samba-config"}]}}}}
+  creationTimestamp: "2026-02-13T16:48:52Z"
+  generation: 17
+  name: samba
+  namespace: default
+  resourceVersion: "285734"
+  uid: 6456eb89-8cdb-46d5-bcb6-a820d7884377
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: samba
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: "2026-02-17T14:11:14-05:00"
+      labels:
+        app: samba
+    spec:
+      containers:
+      - args:
+        - |
+          mkdir -p /data/samba;
+          smbd -F --no-process-group --configfile=/etc/samba/smb.conf
+        command:
+        - /bin/sh
+        - -c
+        image: jash1976/samba-audit:latest
+        imagePullPolicy: Always
+        name: samba
+        readinessProbe:
+          failureThreshold: 3
+          initialDelaySeconds: 2
+          periodSeconds: 1
+          successThreshold: 1
+          tcpSocket:
+            port: 445
+          timeoutSeconds: 1
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /data
+          name: samba-data
+        - mountPath: /etc/samba
+          name: samba-config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: samba-data
+        persistentVolumeClaim:
+          claimName: samba-pvc
+      - configMap:
+          defaultMode: 420
+          name: samba-config
+        name: samba-config
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2026-02-13T16:48:52Z"
+    lastUpdateTime: "2026-02-20T14:20:10Z"
+    message: ReplicaSet "samba-594bdb6fd7" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  - lastTransitionTime: "2026-02-20T14:20:34Z"
+    lastUpdateTime: "2026-02-20T14:20:34Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  observedGeneration: 17
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

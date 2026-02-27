@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: samba-config
+data:
+  smb.conf: |
+    [global]
+        workgroup = WORKGROUP
+        server string = Samba Server
+
+        security = user
+        map to guest = Bad User
+        username map = /etc/samba/username.map
+        null passwords = yes
+
+        server role = standalone server
+        passdb backend = tdbsam
+        load printers = no
+        disable spoolss = yes
+
+        logging = stdout
+        log file = /dev/stdout
+        max log size = 0
+
+        vfs objects = full_audit
+        full_audit:prefix = %u|%I|%S
+        full_audit:success = mkdir rmdir read pread write pwrite rename unlink
+        full_audit:failure = none
+        full_audit:facility = local0
+        full_audit:priority = DEBUG
+
+    [share]
+        path = /data/samba
+        writable = yes
+        browseable = yes
+        guest ok = yes
+        force user = simadmin
+        force group = simadmin
+        vfs objects = full_audit
+
+  username.map: |
+    simadmin = *

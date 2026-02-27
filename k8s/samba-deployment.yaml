@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: samba
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: samba
+  template:
+    metadata:
+      labels:
+        app: samba
+    spec:
+      containers:
+      - name: samba
+        image: local/samba-audit:latest
+        imagePullPolicy: IfNotPresent
+
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Starting Samba with simadmin user..."
+            smbd -F --no-process-group --configfile=/etc/samba/smb.conf
+
+        readinessProbe:
+          tcpSocket:
+            port: 445
+          initialDelaySeconds: 2
+          periodSeconds: 1
+
+        volumeMounts:
+        - name: samba-data
+          mountPath: /data
+
+        - name: smb-conf
+          mountPath: /etc/samba/smb.conf
+          subPath: smb.conf
+
+        - name: username-map
+          mountPath: /etc/samba/username.map
+          subPath: username.map
+
+      volumes:
+      - name: samba-data
+        persistentVolumeClaim:
+          claimName: samba-pvc
+
+      - name: smb-conf
+        configMap:
+          name: samba-config
+          items:
+            - key: smb.conf
+              path: smb.conf
+
+      - name: username-map
+        configMap:
+          name: samba-config
+          items:
+            - key: username.map
+              path: username.map
