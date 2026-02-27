@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: samba-users
+  labels:
+    app: samba-users
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: samba-users
+  template:
+    metadata:
+      labels:
+        app: samba-users
+    spec:
+
+      # Each pod gets a stable DNS name:
+      hostname: samba-users
+      subdomain: samba-users
+
+      containers:
+      - name: samba-users
+        image: local/client:latest
+        imagePullPolicy: IfNotPresent
+
+        securityContext:
+          privileged: true
+
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        # ⭐ FIX: REMOVE args — let ENTRYPOINT run naturally
+        # args:
+        #   - /client/client.sh
+
+        volumeMounts:
+        - name: samba-mount
+          mountPath: /mnt/samba
+
+      volumes:
+      - name: samba-mount
+        emptyDir: {}

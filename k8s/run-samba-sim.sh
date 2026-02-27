@@ -1,0 +1,42 @@
+#!/bin/bash
+
+set -e
+
+echo "=== Applying ConfigMap ==="
+kubectl apply -f samba-config.yaml
+
+echo "=== Restarting Samba server pod ==="
+kubectl delete pod -l app=samba --wait=true
+
+echo "=== Waiting for new Samba pod ==="
+sleep 3
+SAMBA_POD=$(kubectl get pods -l app=samba -o jsonpath='{.items[0].metadata.name}')
+echo "Samba pod: $SAMBA_POD"
+
+echo "=== Restarting client pods ==="
+kubectl delete pod -l app=samba-user --wait=true
+
+echo "=== Waiting for new client pods ==="
+sleep 5
+CLIENT_PODS=$(kubectl get pods -l app=samba-user -o jsonpath='{.items[*].metadata.name}')
+echo "Client pods:"
+echo "$CLIENT_PODS"
+
+echo "=== Checking that username map file is mounted ==="
+kubectl exec -it "$SAMBA_POD" -- ls -l /etc/samba/
+
+echo "=== Showing smb.conf inside Samba pod ==="
+kubectl exec -it "$SAMBA_POD" -- cat /etc/samba/smb.conf
+
+echo "=== Checking CIFS mounts inside each client pod ==="
+for POD in $CLIENT_PODS; do
+    echo "--- $POD ---"
+    kubectl exec -it "$POD" -- mount | grep cifs || echo "No CIFS mount found"
+done
+
+echo "=== Checking Samba logs for username mapping ==="
+kubectl logs "$SAMBA_POD" | tail -n 20
+
+echo "=== Starting real-time watch on Samba share ==="
+echo "Press CTRL+C to exit"
+kubectl exec -it "$SAMBA_POD" -- watch ls -l /data/samba
