@@ -21,13 +21,7 @@ data:
         logging = stdout
         log file = /dev/stdout
         max log size = 0
-
-        vfs objects = full_audit
-        full_audit:prefix = %u|%I|%S
-        full_audit:success = mkdir rmdir read pread write pwrite rename unlink
-        full_audit:failure = none
-        full_audit:facility = local0
-        full_audit:priority = DEBUG
+        syslog = 0
 
     [share]
         path = /data/samba
@@ -37,6 +31,12 @@ data:
         force user = simadmin
         force group = simadmin
         vfs objects = full_audit
+        full_audit:prefix = client=%m|auth=%U|mapped=%u|ip=%I|share=%S
+        full_audit:success = connect disconnect open close read pread write pwrite mkdirat renameat unlinkat
+        full_audit:failure = none
+        full_audit:facility = local0
+        full_audit:priority = DEBUG
+        full_audit:syslog = no
 
   username.map: |
     simadmin = *

@@ -1,11 +1,12 @@
-FROM ubuntu:24.04
+ARG BASE_IMAGE=local/ubuntu-base:24.04
+FROM ${BASE_IMAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
 
 # When true: remove all Ubuntu repos and install ONLY from /opt/debs
 # When false: keep Ubuntu repos (online build) and ignore /opt/debs
-ARG OFFLINE_BUILD=false
+ARG OFFLINE_BUILD=true
 
 # Always copy the local deb repo (harmless even in online mode)
 COPY minimal-debs /opt/debs

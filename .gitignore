@@ -1,0 +1,8 @@
+pat.txt
+client/minimal-debs-hard-copy/
+server/min-debs-hard-copy/
+
+*.gz
+*.deb
+*.tar
+ubuntu-base-image/
