@@ -7,3 +7,4 @@ server/min-debs-hard-copy/
 *.tar
 ubuntu-base-image/
 download-repo-output/
+scripts/git_push_with_pat.sh
