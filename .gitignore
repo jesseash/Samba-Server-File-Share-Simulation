@@ -6,3 +6,4 @@ server/min-debs-hard-copy/
 *.deb
 *.tar
 ubuntu-base-image/
+download-repo-output/

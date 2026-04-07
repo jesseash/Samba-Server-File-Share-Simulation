@@ -7,11 +7,12 @@ PAT_FILE="$REPO_ROOT/pat.txt"
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/git_push_with_pat.sh [--dry-run] [--branch <name>]
+Usage: bash scripts/git_push_with_pat.sh [--dry-run] [--branch <name>] [--force]
 
 Options:
   --dry-run            Show what would be pushed without pushing.
   --branch <name>      Push HEAD to this branch (default: current branch, or main).
+  --force              Use force-with-lease to overwrite remote (handles conflicts).
   -h, --help           Show this help.
 
 Environment variables:
@@ -22,6 +23,7 @@ EOF
 
 DRY_RUN=0
 TARGET_BRANCH=""
+FORCE_PUSH=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,6 +39,10 @@ while [[ $# -gt 0 ]]; do
       fi
       TARGET_BRANCH="$2"
       shift 2
+      ;;
+    --force)
+      FORCE_PUSH=1
+      shift
       ;;
     -h|--help)
       usage
@@ -99,9 +105,12 @@ REPO_SLUG="${REPO_SLUG%.git}"
 GIT_PAT_USER="${GIT_PAT_USER:-x-access-token}"
 PUSH_URL="https://${GIT_PAT_USER}:${PAT}@github.com/${REPO_SLUG}.git"
 
+PUSH_OPTS=()
+[[ "$FORCE_PUSH" -eq 1 ]] && PUSH_OPTS+=(--force)
+
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Dry run: pushing HEAD -> ${TARGET_BRANCH} on ${REPO_SLUG}"
-  git push --dry-run "$PUSH_URL" "HEAD:${TARGET_BRANCH}"
+  git push --dry-run "${PUSH_OPTS[@]}" "$PUSH_URL" "HEAD:${TARGET_BRANCH}"
 else
-  git push "$PUSH_URL" "HEAD:${TARGET_BRANCH}"
+  git push "${PUSH_OPTS[@]}" "$PUSH_URL" "HEAD:${TARGET_BRANCH}"
 fi
