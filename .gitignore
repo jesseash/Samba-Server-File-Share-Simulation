@@ -12,3 +12,5 @@ scripts/configure_samba.sh
 scripts/create_samba_user.sh
 scripts/restart_services.sh
 config/
+tests/
+shares/
