@@ -299,34 +299,6 @@ function Run-WslBootstrap {
     Invoke-WslCommand -AsRoot -Command $command
 }
 
-Write-Step 'Validating Windows host'
-Assert-Administrator
-Assert-SupportedWindows
-
-Write-Step 'Preparing WSL2'
-Ensure-WslPlatform
-Ensure-DistroInstalled
-Ensure-SystemdEnabled
-
-Write-Step 'Preparing target repo path inside WSL'
-$primaryUser = Get-WslPrimaryUser
-if ([string]::IsNullOrWhiteSpace($WslRepoPath)) {
-    if ($primaryUser -eq 'root') {
-        $WslRepoPath = "/root/$RepoName"
-    }
-    else {
-        $WslRepoPath = "/home/$primaryUser/$RepoName"
-    }
-}
-Write-Log "Primary WSL user: $primaryUser"
-Write-Log "WSL repo path: $WslRepoPath"
-
-Write-Step 'Copying cloned repo into the WSL filesystem'
-Copy-RepoIntoWsl -DestinationPath $WslRepoPath
-
-Write-Step 'Installing Ubuntu dependencies, k3s, and building images'
-Run-WslBootstrap -DestinationPath $WslRepoPath
-
 function Export-KubeconfigToWindows {
     $windowsKubeDir = Join-Path $env:USERPROFILE '.kube'
     $windowsKubeConfig = Join-Path $windowsKubeDir 'samba-cifs-sim-k3s.yaml'
@@ -350,10 +322,42 @@ function Export-KubeconfigToWindows {
     return $windowsKubeConfig
 }
 
-Write-Step 'Copying kubeconfig to Windows'
-$WindowsKubeConfigPath = Export-KubeconfigToWindows
+function Main {
+    Write-Step 'Validating Windows host'
+    Assert-Administrator
+    Assert-SupportedWindows
 
-Write-Step 'Completed'
-Write-Host "WSL post-clone setup is complete." -ForegroundColor Green
-Write-Host "Repo mirrored to: $WslRepoPath" -ForegroundColor Green
-Write-Host "Windows kubeconfig: $WindowsKubeConfigPath" -ForegroundColor Green
+    Write-Step 'Preparing WSL2'
+    Ensure-WslPlatform
+    Ensure-DistroInstalled
+    Ensure-SystemdEnabled
+
+    Write-Step 'Preparing target repo path inside WSL'
+    $primaryUser = Get-WslPrimaryUser
+    if ([string]::IsNullOrWhiteSpace($WslRepoPath)) {
+        if ($primaryUser -eq 'root') {
+            $script:WslRepoPath = "/root/$RepoName"
+        }
+        else {
+            $script:WslRepoPath = "/home/$primaryUser/$RepoName"
+        }
+    }
+    Write-Log "Primary WSL user: $primaryUser"
+    Write-Log "WSL repo path: $WslRepoPath"
+
+    Write-Step 'Copying cloned repo into the WSL filesystem'
+    Copy-RepoIntoWsl -DestinationPath $WslRepoPath
+
+    Write-Step 'Installing Ubuntu dependencies, k3s, and building images'
+    Run-WslBootstrap -DestinationPath $WslRepoPath
+
+    Write-Step 'Copying kubeconfig to Windows'
+    $WindowsKubeConfigPath = Export-KubeconfigToWindows
+
+    Write-Step 'Completed'
+    Write-Host "WSL post-clone setup is complete." -ForegroundColor Green
+    Write-Host "Repo mirrored to: $WslRepoPath" -ForegroundColor Green
+    Write-Host "Windows kubeconfig: $WindowsKubeConfigPath" -ForegroundColor Green
+}
+
+Main
