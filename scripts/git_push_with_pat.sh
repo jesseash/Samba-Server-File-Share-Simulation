@@ -124,7 +124,7 @@ REPO_SLUG="${REPO_SLUG%.git}"
 GIT_PAT_USER="${GIT_PAT_USER:-x-access-token}"
 PUSH_URL="https://${GIT_PAT_USER}:${PAT}@github.com/${REPO_SLUG}.git"
 
-PUSH_OPTS=(--force-with-lease)
+PUSH_OPTS=(--force)
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Dry run: pushing HEAD -> ${TARGET_BRANCH} on ${REPO_SLUG}"
