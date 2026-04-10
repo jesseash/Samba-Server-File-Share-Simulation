@@ -8,6 +8,7 @@ server/min-debs-hard-copy/
 ubuntu-base-image/
 download-repo-output/
 scripts/git_push_with_pat.sh
+scripts/update_windows_scripts.sh
 scripts/configure_samba.sh
 scripts/create_samba_user.sh
 scripts/restart_services.sh
