@@ -25,7 +25,7 @@ EOF
 
 DRY_RUN=0
 TARGET_BRANCH=""
-COMMIT_MESSAGE=""
+COMMIT_MESSAGE="updating windows set up script"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -86,11 +86,6 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   git add -A
 
   if ! git diff --cached --quiet; then
-    if [[ -z "$COMMIT_MESSAGE" ]]; then
-      echo "Changes detected but no commit message provided. Use --message \"...\"." >&2
-      exit 1
-    fi
-
     git commit -m "$COMMIT_MESSAGE"
   else
     echo "No local changes to commit."
