@@ -35,6 +35,8 @@ TAR_PATH="${REPO_ROOT}/${TAR_NAME}"
 UBUNTU_BASE_IMAGE_DIR="${REPO_ROOT}/ubuntu-base-image"
 CLIENT_DEBS_DIR="${REPO_ROOT}/client/minimal-debs"
 SERVER_DEBS_DIR="${REPO_ROOT}/server/minimal-debs"
+CLIENT_HARD_COPY_DIR="${REPO_ROOT}/client/minimal-debs-hard-copy"
+SERVER_HARD_COPY_DIR="${REPO_ROOT}/server/minimal-debs-hard-copy"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -149,9 +151,21 @@ main() {
     "2"
 
   populate_from_tar \
+    "client/minimal-debs-hard-copy" \
+    "client/minimal-debs-hard-copy" \
+    "${CLIENT_HARD_COPY_DIR}" \
+    "2"
+
+  populate_from_tar \
     "server/minimal-debs" \
     "server/minimal-debs-hard-copy" \
     "${SERVER_DEBS_DIR}" \
+    "2"
+
+  populate_from_tar \
+    "server/minimal-debs-hard-copy" \
+    "server/minimal-debs-hard-copy" \
+    "${SERVER_HARD_COPY_DIR}" \
     "2"
 
   # ---- Verify ----
@@ -172,8 +186,18 @@ main() {
     "client/minimal-debs-hard-copy" || errors=$((errors + 1))
 
   verify_dir_from_tar \
+    "client/minimal-debs-hard-copy" \
+    "${CLIENT_HARD_COPY_DIR}" \
+    "client/minimal-debs-hard-copy" || errors=$((errors + 1))
+
+  verify_dir_from_tar \
     "server/minimal-debs" \
     "${SERVER_DEBS_DIR}" \
+    "server/minimal-debs-hard-copy" || errors=$((errors + 1))
+
+  verify_dir_from_tar \
+    "server/minimal-debs-hard-copy" \
+    "${SERVER_HARD_COPY_DIR}" \
     "server/minimal-debs-hard-copy" || errors=$((errors + 1))
 
   echo
@@ -189,6 +213,8 @@ main() {
   echo "  Base image  : ${UBUNTU_BASE_IMAGE_DIR}"
   echo "  Client debs : ${CLIENT_DEBS_DIR}"
   echo "  Server debs : ${SERVER_DEBS_DIR}"
+  echo "  Client hard : ${CLIENT_HARD_COPY_DIR}"
+  echo "  Server hard : ${SERVER_HARD_COPY_DIR}"
   echo
   echo "You can now run:"
   echo "  bash client/rebuild-client.sh"

@@ -9,6 +9,8 @@ IMAGE_TAR="${IMAGE_TAR:-samba-audit-latest.tar}"
 DEPLOYMENT="${DEPLOYMENT:-samba}"
 NAMESPACE="${NAMESPACE:-default}"
 SERVER_MANIFEST="${SERVER_MANIFEST:-${REPO_ROOT}/k8s/samba-deployment.yaml}"
+PVC_MANIFEST="${PVC_MANIFEST:-${REPO_ROOT}/k8s/pvc.yaml}"
+SAMBA_CONFIG_MANIFEST="${SAMBA_CONFIG_MANIFEST:-${REPO_ROOT}/k8s/samba-config.yaml}"
 APP_LABEL_KEY="${APP_LABEL_KEY:-app}"
 APP_LABEL_VALUE="${APP_LABEL_VALUE:-$DEPLOYMENT}"
 CONTAINER_INDEX="${CONTAINER_INDEX:-0}"
@@ -30,6 +32,8 @@ echo "IMAGE_TAR: ${IMAGE_TAR}"
 echo "DEPLOYMENT: ${DEPLOYMENT}"
 echo "NAMESPACE: ${NAMESPACE}"
 echo "SERVER_MANIFEST: ${SERVER_MANIFEST}"
+echo "PVC_MANIFEST: ${PVC_MANIFEST}"
+echo "SAMBA_CONFIG_MANIFEST: ${SAMBA_CONFIG_MANIFEST}"
 echo "LABEL: ${APP_LABEL_KEY}=${APP_LABEL_VALUE}"
 echo "CONTAINER_INDEX: ${CONTAINER_INDEX}"
 echo "TARGET_REPLICAS: ${TARGET_REPLICAS}"
@@ -38,6 +42,11 @@ echo "HARD_COPY_DIR: ${HARD_COPY_DIR}"
 echo "BASE_IMAGE_TAR: ${BASE_IMAGE_TAR}"
 echo "BASE_IMAGE_NAME: ${BASE_IMAGE_NAME}"
 echo
+
+has_repo_files() {
+	local dir_path="$1"
+	find "${dir_path}" -maxdepth 1 -type f -print -quit 2>/dev/null | grep -q .
+}
 
 load_base_image() {
 	local import_out imported_ref
@@ -67,11 +76,41 @@ load_base_image() {
 if [[ "${OFFLINE_STRICT}" == "1" ]]; then
 	echo "=== Step 0: OFFLINE_STRICT=1 -> using local hard-copy debs only ==="
 	if [[ ! -d "${HARD_COPY_DIR}" ]]; then
-		echo "❌ ERROR: Hard-copy deb directory not found: ${HARD_COPY_DIR}"
-		exit 1
+		echo "⚠️ WARN: Hard-copy deb directory not found: ${HARD_COPY_DIR}"
+		for candidate_dir in \
+			"${SERVER_DIR}/minimal-debs-hard-copy" \
+			"${REPO_ROOT}/download-repo-output/server/minimal-debs"; do
+			if [[ -d "${candidate_dir}" ]]; then
+				echo "ℹ️ INFO: Using fallback hard-copy directory: ${candidate_dir}"
+				HARD_COPY_DIR="${candidate_dir}"
+				break
+			fi
+		done
 	fi
-	find "${SERVER_DIR}/minimal-debs" -maxdepth 1 -type f ! -name 'download-minimal-debs.sh' -delete
-	find "${HARD_COPY_DIR}" -maxdepth 1 -type f -exec cp -f {} "${SERVER_DIR}/minimal-debs/" \;
+
+	if [[ -d "${HARD_COPY_DIR}" ]]; then
+		find "${SERVER_DIR}/minimal-debs" -maxdepth 1 -type f ! -name 'download-minimal-debs.sh' -delete
+		find "${HARD_COPY_DIR}" -maxdepth 1 -type f -exec cp -f {} "${SERVER_DIR}/minimal-debs/" \;
+	fi
+
+	if ! has_repo_files "${SERVER_DIR}/minimal-debs"; then
+		echo "⚠️ WARN: No package files available in ${SERVER_DIR}/minimal-debs"
+		echo "⚠️ WARN: Attempting to repopulate repo assets via scripts/download-repo.sh"
+		if [[ -x "${REPO_ROOT}/scripts/download-repo.sh" || -f "${REPO_ROOT}/scripts/download-repo.sh" ]]; then
+			bash "${REPO_ROOT}/scripts/download-repo.sh"
+		fi
+
+		if [[ -d "${HARD_COPY_DIR}" ]]; then
+			find "${SERVER_DIR}/minimal-debs" -maxdepth 1 -type f ! -name 'download-minimal-debs.sh' -delete
+			find "${HARD_COPY_DIR}" -maxdepth 1 -type f -exec cp -f {} "${SERVER_DIR}/minimal-debs/" \;
+		fi
+
+		if ! has_repo_files "${SERVER_DIR}/minimal-debs"; then
+			echo "❌ ERROR: No package files available in ${SERVER_DIR}/minimal-debs"
+			echo "❌ ERROR: Checked hard-copy directory: ${HARD_COPY_DIR}"
+			exit 1
+		fi
+	fi
 else
 	echo "=== Step 0: Refreshing minimal-debs (downloads + Packages.gz) ==="
 	pushd "${SERVER_DIR}/minimal-debs" >/dev/null
@@ -165,24 +204,43 @@ fi
 echo "K3S_SHA: ${K3S_SHA}"
 
 echo "=== Step 5: Scaling deployment/${DEPLOYMENT} to replicas=${TARGET_REPLICAS} ==="
-if ! kubectl -n "${NAMESPACE}" get deployment "${DEPLOYMENT}" >/dev/null 2>&1; then
-	echo "deployment/${DEPLOYMENT} not found. Recreating from manifest: ${SERVER_MANIFEST}"
-	if [[ ! -f "${SERVER_MANIFEST}" ]]; then
-		echo "❌ ERROR: Deployment manifest not found: ${SERVER_MANIFEST}"
-		exit 1
-	fi
-	kubectl -n "${NAMESPACE}" apply -f "${SERVER_MANIFEST}"
+if [[ ! -f "${PVC_MANIFEST}" ]]; then
+	echo "❌ ERROR: PVC manifest not found: ${PVC_MANIFEST}"
+	exit 1
 fi
+if [[ ! -f "${SAMBA_CONFIG_MANIFEST}" ]]; then
+	echo "❌ ERROR: ConfigMap manifest not found: ${SAMBA_CONFIG_MANIFEST}"
+	exit 1
+fi
+if [[ ! -f "${SERVER_MANIFEST}" ]]; then
+	echo "❌ ERROR: Deployment manifest not found: ${SERVER_MANIFEST}"
+	exit 1
+fi
+
+echo "Applying PVC manifest: ${PVC_MANIFEST}"
+kubectl -n "${NAMESPACE}" apply -f "${PVC_MANIFEST}"
+echo "Applying ConfigMap manifest: ${SAMBA_CONFIG_MANIFEST}"
+kubectl -n "${NAMESPACE}" apply -f "${SAMBA_CONFIG_MANIFEST}"
+echo "Applying deployment manifest: ${SERVER_MANIFEST}"
+kubectl -n "${NAMESPACE}" apply -f "${SERVER_MANIFEST}"
 kubectl -n "${NAMESPACE}" scale "deployment/${DEPLOYMENT}" --replicas="${TARGET_REPLICAS}"
 
 echo "=== Step 6: Restarting deployment ==="
+echo "Cleaning up stale Pending pods for app=${APP_LABEL_VALUE} (if any)"
+kubectl -n "${NAMESPACE}" get pods -l "${APP_LABEL_KEY}=${APP_LABEL_VALUE}" --no-headers 2>/dev/null \
+	| awk '$3 == "Pending" {print $1}' \
+	| xargs -r -I{} kubectl -n "${NAMESPACE}" delete pod {} --force --grace-period=0 >/dev/null 2>&1 || true
 kubectl -n "${NAMESPACE}" rollout restart "deployment/${DEPLOYMENT}"
 
 echo "=== Step 7: Waiting for rollout to complete (fail fast on bad pod states) ==="
 ROLL_TIMEOUT="${ROLL_TIMEOUT:-300}"
 POLL_SECS="${POLL_SECS:-3}"
+STATUS_EVERY="${STATUS_EVERY:-15}"
+PENDING_FAIL_AFTER="${PENDING_FAIL_AFTER:-60}"
 
 deadline=$((SECONDS + ROLL_TIMEOUT))
+next_status_at=${SECONDS}
+pending_since=0
 while (( SECONDS < deadline )); do
 	NEW_RS="$(
 		kubectl -n "${NAMESPACE}" get rs -l "${APP_LABEL_KEY}=${APP_LABEL_VALUE}" \
@@ -212,7 +270,48 @@ while (( SECONDS < deadline )); do
 		fi
 	fi
 
-	if kubectl -n "${NAMESPACE}" rollout status "deployment/${DEPLOYMENT}" --timeout=5s >/dev/null; then
+	if (( SECONDS >= next_status_at )); then
+		DEPLOY_STATUS="$(
+			kubectl -n "${NAMESPACE}" get deployment "${DEPLOYMENT}" \
+				-o jsonpath='ready={.status.readyReplicas} updated={.status.updatedReplicas} available={.status.availableReplicas} desired={.spec.replicas}' \
+				2>/dev/null || true
+		)"
+		echo "[rollout] ${DEPLOY_STATUS:-status unavailable}"
+		kubectl -n "${NAMESPACE}" get pods -l "${APP_LABEL_KEY}=${APP_LABEL_VALUE}" --no-headers 2>/dev/null \
+			| awk '{print "[rollout][pod] " $1 " " $3 " " $2}' || true
+		next_status_at=$((SECONDS + STATUS_EVERY))
+	fi
+
+	PENDING_PODS="$({
+		kubectl -n "${NAMESPACE}" get pods -l "${APP_LABEL_KEY}=${APP_LABEL_VALUE}" --no-headers 2>/dev/null \
+			| awk '$3 == "Pending" {print $1}' || true
+	})"
+	if [[ -n "${PENDING_PODS}" ]]; then
+		if (( pending_since == 0 )); then
+			pending_since=${SECONDS}
+		fi
+
+		if (( SECONDS - pending_since >= PENDING_FAIL_AFTER )); then
+			echo "❌ ERROR: Pods remained Pending for >= ${PENDING_FAIL_AFTER}s"
+			echo "Pending pods:"
+			echo "${PENDING_PODS}"
+			while IFS= read -r pod_name; do
+				[[ -z "${pod_name}" ]] && continue
+				echo "--- describe pod/${pod_name} ---"
+				kubectl -n "${NAMESPACE}" describe pod "${pod_name}" | sed -n '1,260p' || true
+			done <<< "${PENDING_PODS}"
+			echo "--- PVC status ---"
+			kubectl -n "${NAMESPACE}" get pvc -o wide || true
+			kubectl -n "${NAMESPACE}" describe pvc || true
+			echo "--- Recent events ---"
+			kubectl -n "${NAMESPACE}" get events --sort-by=.lastTimestamp | tail -n 60 || true
+			exit 1
+		fi
+	else
+		pending_since=0
+	fi
+
+	if kubectl -n "${NAMESPACE}" rollout status "deployment/${DEPLOYMENT}" --timeout=5s >/dev/null 2>&1; then
 		kubectl -n "${NAMESPACE}" rollout status "deployment/${DEPLOYMENT}" --timeout=5s
 		break
 	fi
@@ -226,6 +325,7 @@ if ! kubectl -n "${NAMESPACE}" rollout status "deployment/${DEPLOYMENT}" --timeo
 	kubectl -n "${NAMESPACE}" get rs -l "${APP_LABEL_KEY}=${APP_LABEL_VALUE}" --sort-by=.metadata.creationTimestamp -o wide || true
 	kubectl -n "${NAMESPACE}" get pods -l "${APP_LABEL_KEY}=${APP_LABEL_VALUE}" -o wide || true
 	kubectl -n "${NAMESPACE}" describe deploy "${DEPLOYMENT}" | sed -n '1,260p' || true
+	kubectl -n "${NAMESPACE}" describe rs -l "${APP_LABEL_KEY}=${APP_LABEL_VALUE}" | sed -n '1,260p' || true
 	exit 1
 fi
 

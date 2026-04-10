@@ -11,6 +11,8 @@ scripts/git_push_with_pat.sh
 scripts/configure_samba.sh
 scripts/create_samba_user.sh
 scripts/restart_services.sh
+scripts/diagnose-k3s-connection.ps1
+scripts/enable_git_hooks.sh
 config/
 tests/
 shares/
