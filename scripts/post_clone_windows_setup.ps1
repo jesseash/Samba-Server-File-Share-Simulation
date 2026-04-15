@@ -322,7 +322,7 @@ function Ensure-DistroInstalled {
     }
 }
 
-function Ensure-SystemdEnabled {
+function Ensure-SystemdEnabled {#test2
     # Write a robust bash script to a temp file
     $tempScript = [System.IO.Path]::GetTempFileName() + ".sh"
     $bashScript = @"
