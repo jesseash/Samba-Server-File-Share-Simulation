@@ -323,30 +323,37 @@ function Ensure-DistroInstalled {
 }
 
 function Ensure-SystemdEnabled {
-    $command = @'
+    # Write a robust bash script to a temp file
+    $tempScript = [System.IO.Path]::GetTempFileName() + ".sh"
+    $bashScript = @"
 set -e
 if [ -f /etc/wsl.conf ] \
-    && grep -Eq "^\[boot\][[:space:]]*$" /etc/wsl.conf \
-    && grep -Eq "^[[:space:]]*systemd[[:space:]]*=[[:space:]]*true[[:space:]]*$" /etc/wsl.conf; then
+    && grep -Eq '^\[boot\][[:space:]]*$' /etc/wsl.conf \
+    && grep -Eq '^[[:space:]]*systemd[[:space:]]*=[[:space:]]*true[[:space:]]*$' /etc/wsl.conf; then
     echo unchanged
 else
-    cat > /etc/wsl.conf <<'EOF'
-[boot]
-systemd=true
-EOF
+    echo -e '[boot]\nsystemd=true' > /etc/wsl.conf
     echo changed
 fi
-'@
+"@
+    Set-Content -Path $tempScript -Value $bashScript -Encoding UTF8 -NoNewline
 
-    $result = Invoke-WslCommand -AsRoot -Command $command -CaptureOutput
+    $wslScript = "/tmp/ensure_systemd.sh"
+    Invoke-WslCommand -AsRoot -Command "rm -f $wslScript" | Out-Null
+    & wsl.exe -d $DistroName -- bash -c "cat > $wslScript" < $tempScript
+    Invoke-WslCommand -AsRoot -Command "chmod +x $wslScript" | Out-Null
+    $result = Invoke-WslCommand -AsRoot -Command "bash $wslScript" -CaptureOutput
+
+    Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue
+    Invoke-WslCommand -AsRoot -Command "rm -f $wslScript" | Out-Null
+
     if ($result -match 'changed') {
         Write-Log 'Enabled systemd in /etc/wsl.conf'
         Write-Log 'Restarting WSL so systemd becomes active'
         Invoke-Native -FilePath 'wsl.exe' -ArgumentList @('--shutdown')
         Start-Sleep -Seconds 5
-        Invoke-WslCommand -AsRoot -Command 'echo WSL restarted with systemd'
-    }
-    else {
+        Invoke-WslCommand -AsRoot -Command 'echo WSL restarted with systemd' | Out-Null
+    } else {
         Write-Log 'systemd is already enabled in /etc/wsl.conf'
     }
 }
