@@ -913,10 +913,40 @@ function Main {
     Write-Step 'Installing Ubuntu dependencies, k3s, and building images'
     Run-WslBootstrap -DestinationPath $WslRepoPath
 
+    Write-Step 'Configuring Windows port proxy for k3s API (required for Lens)'
+    $wslIp = (Invoke-WslCommand -AsRoot -CaptureOutput -Command "ip -4 -o addr show dev eth0 | sed -n 's/.* inet \([0-9.]*\)\/.*/\1/p' | head -n1").Trim()
+    if ([string]::IsNullOrWhiteSpace($wslIp)) {
+        $wslIp = (Invoke-WslCommand -AsRoot -CaptureOutput -Command "hostname -I | tr ' ' '\n' | sed -n '1p'").Trim()
+    }
+
+    $selectedApiServer = 'https://127.0.0.1:6443'
+    if ([string]::IsNullOrWhiteSpace($wslIp)) {
+        Write-Log 'WARNING: Could not determine WSL IP; Lens may not connect automatically'
+    } else {
+        Setup-KubePortProxy -WslIp $wslIp
+
+        if (Test-KubeApiEndpoint -ServerUrl 'https://127.0.0.1:6443') {
+            $selectedApiServer = 'https://127.0.0.1:6443'
+            Write-Log 'Using localhost API endpoint through Windows port proxy'
+        }
+        elseif (Test-KubeApiEndpoint -ServerUrl ("https://$wslIp:6443")) {
+            $selectedApiServer = "https://$wslIp:6443"
+            Write-Log "WARNING: Falling back to direct WSL API endpoint: $selectedApiServer"
+        }
+        else {
+            Write-Log 'WARNING: Could not verify Kubernetes API endpoint on either localhost proxy or direct WSL IP'
+        }
+    }
+
+    Write-Step 'Copying kubeconfig to Windows'
+    $WindowsKubeConfigPath = Export-KubeconfigToWindows -ApiServer $selectedApiServer
+
+    Configure-LensKubeconfig -KubeconfigPath $WindowsKubeConfigPath
+
     Write-Step 'Completed'
     Write-Host "WSL post-clone setup is complete." -ForegroundColor Green
     Write-Host "Repo mirrored to: $WslRepoPath" -ForegroundColor Green
-    Write-Host "Next step (Freelens kubeconfig): powershell -ExecutionPolicy Bypass -File `"$ScriptDir\configure_freelens_kubeconfig.ps1`" -DistroName $DistroName" -ForegroundColor Green
+    Write-Host "Windows kubeconfig: $WindowsKubeConfigPath" -ForegroundColor Green
 }
 
 Main
