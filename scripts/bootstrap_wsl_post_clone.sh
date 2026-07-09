@@ -116,6 +116,162 @@ wait_for_k3s() {
   kubectl get nodes -o wide
 }
 
+get_wsl_eth0_ipv4() {
+  local current_ip
+
+  current_ip="$(ip -4 -o addr show dev eth0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n 1)"
+  if [[ -n "${current_ip}" ]]; then
+    echo "${current_ip}"
+    return 0
+  fi
+
+  current_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  echo "${current_ip}"
+}
+
+wait_for_wsl_ip_stability() {
+  local timeout=240
+  local interval=5
+  local required_stable_checks=8
+  local stable_checks=0
+  local start
+  local last_ip=""
+
+  start="$(date +%s)"
+  log "Waiting for WSL2 IP stability on eth0 before workload setup"
+
+  while true; do
+    local current_ip
+    current_ip="$(get_wsl_eth0_ipv4)"
+
+    if [[ -z "${current_ip}" ]]; then
+      stable_checks=0
+      log "WSL2 IP not available yet on eth0"
+    elif [[ "${current_ip}" == "${last_ip}" ]]; then
+      stable_checks=$((stable_checks + 1))
+      log "WSL2 IP stability check ${stable_checks}/${required_stable_checks} passed (ip=${current_ip})"
+      if [[ "${stable_checks}" -ge "${required_stable_checks}" ]]; then
+        log "WSL2 IP stability window satisfied (ip=${current_ip})"
+        return 0
+      fi
+    else
+      if [[ -n "${last_ip}" ]]; then
+        log "WSL2 IP changed on eth0: ${last_ip} -> ${current_ip}"
+      else
+        log "Detected initial WSL2 eth0 IP: ${current_ip}"
+      fi
+      last_ip="${current_ip}"
+      stable_checks=1
+      log "WSL2 IP stability check ${stable_checks}/${required_stable_checks} passed (ip=${current_ip})"
+    fi
+
+    if (( $(date +%s) - start > timeout )); then
+      fail "WSL2 IP did not stabilize within ${timeout}s"
+    fi
+
+    sleep "${interval}"
+  done
+}
+
+wait_for_runtime_stability() {
+  local timeout=300
+  local interval=10
+  local required_stable_checks=6
+  local stable_checks=0
+  local start
+
+  start="$(date +%s)"
+  log "Waiting for sustained runtime stability before applying workloads"
+
+  while true; do
+    local k3s_active=0
+    local containerd_ready=0
+    local not_ready_nodes=999
+
+    if systemctl is-active --quiet k3s; then
+      k3s_active=1
+    fi
+
+    if /usr/local/bin/k3s crictl info >/dev/null 2>&1; then
+      containerd_ready=1
+    fi
+
+    if kubectl get nodes --no-headers >/dev/null 2>&1; then
+      not_ready_nodes="$(kubectl get nodes --no-headers 2>/dev/null | awk '$2 != "Ready" {count++} END {print count+0}')"
+    fi
+
+    if [[ "${k3s_active}" -eq 1 && "${containerd_ready}" -eq 1 && "${not_ready_nodes}" -eq 0 ]]; then
+      stable_checks=$((stable_checks + 1))
+      log "Runtime stability check ${stable_checks}/${required_stable_checks} passed"
+      if [[ "${stable_checks}" -ge "${required_stable_checks}" ]]; then
+        log "Runtime stability window satisfied"
+        return 0
+      fi
+    else
+      stable_checks=0
+      log "Runtime not stable yet (k3s_active=${k3s_active}, containerd_ready=${containerd_ready}, not_ready_nodes=${not_ready_nodes})"
+    fi
+
+    if (( $(date +%s) - start > timeout )); then
+      fail "k3s/containerd/node stability window not reached within ${timeout}s"
+    fi
+
+    sleep "${interval}"
+  done
+}
+
+wait_for_kube_system_core_ready() {
+  local timeout=420
+  local interval=10
+  local required_stable_checks=4
+  local stable_checks=0
+  local start
+
+  start="$(date +%s)"
+  log "Waiting for kube-system CNI/core readiness before workload apply"
+
+  while true; do
+    local cni_ready=0
+    local flannel_subnet_ready=0
+    local coredns_running=0
+    local local_path_running=0
+
+    if ls /var/lib/rancher/k3s/agent/etc/cni/net.d/* >/dev/null 2>&1; then
+      cni_ready=1
+    fi
+
+    if [[ -s /run/flannel/subnet.env ]]; then
+      flannel_subnet_ready=1
+    fi
+
+    if kubectl -n kube-system get pod --no-headers 2>/dev/null | awk '$1 ~ /^coredns-/ && $3 == "Running" {found=1} END {exit(found?0:1)}'; then
+      coredns_running=1
+    fi
+
+    if kubectl -n kube-system get pod --no-headers 2>/dev/null | awk '$1 ~ /^local-path-provisioner-/ && $3 == "Running" {found=1} END {exit(found?0:1)}'; then
+      local_path_running=1
+    fi
+
+    if [[ "${cni_ready}" -eq 1 && "${flannel_subnet_ready}" -eq 1 && "${coredns_running}" -eq 1 && "${local_path_running}" -eq 1 ]]; then
+      stable_checks=$((stable_checks + 1))
+      log "kube-system stability check ${stable_checks}/${required_stable_checks} passed"
+      if [[ "${stable_checks}" -ge "${required_stable_checks}" ]]; then
+        log "kube-system CNI/core readiness window satisfied"
+        return 0
+      fi
+    else
+      stable_checks=0
+      log "kube-system not ready yet (cni_ready=${cni_ready}, flannel_subnet_ready=${flannel_subnet_ready}, coredns_running=${coredns_running}, local_path_running=${local_path_running})"
+    fi
+
+    if (( $(date +%s) - start > timeout )); then
+      fail "kube-system CNI/core readiness not reached within ${timeout}s"
+    fi
+
+    sleep "${interval}"
+  done
+}
+
 fix_kubeconfig_server_endpoint() {
   local kubeconfig="/etc/rancher/k3s/k3s.yaml"
 
@@ -185,6 +341,9 @@ main() {
   configure_docker
   install_k3s
   wait_for_k3s
+  wait_for_wsl_ip_stability
+  wait_for_runtime_stability
+  wait_for_kube_system_core_ready
   fix_kubeconfig_server_endpoint
   run_repo_bootstrap
   apply_k8s_manifests_and_verify_backend

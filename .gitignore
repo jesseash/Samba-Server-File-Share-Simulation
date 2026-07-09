@@ -1,6 +1,7 @@
 pat.txt
 client/minimal-debs-hard-copy/
-server/min-debs-hard-copy/
+server/minimal-debs-hard-copy/
+server/sambaimage
 
 *.gz
 *.deb

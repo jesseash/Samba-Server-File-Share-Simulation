@@ -89,7 +89,15 @@ else
   popd >/dev/null
 fi
 
-"${CLIENT_DIR}/make-local-repo.sh"
+if [[ -x "${CLIENT_DIR}/make-local-repo.sh" ]]; then
+  bash "${CLIENT_DIR}/make-local-repo.sh"
+else
+  echo "=== Step 0B: make-local-repo.sh missing; generating Packages.gz directly ==="
+  command -v dpkg-scanpackages >/dev/null 2>&1 || { echo "❌ ERROR: dpkg-scanpackages not found"; exit 1; }
+  pushd "${CLIENT_DIR}/minimal-debs" >/dev/null
+  dpkg-scanpackages . /dev/null | gzip -9c > Packages.gz
+  popd >/dev/null
+fi
 
 load_base_image
 
