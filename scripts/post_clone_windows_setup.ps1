@@ -256,34 +256,44 @@ function Run-WslBootstrap {
     Invoke-WslCommandStreaming -AsRoot -Command $command -TimeoutSeconds ($BootstrapTimeoutSeconds + 120) -SuccessMarkerWindowsPath $markerWindowsPath
 }
 
-function $ts = (Get-Date -Format yyyyMMddHHmmss)
-$tar = "C:\tmp\Ubuntu-k3s-backup-$ts.tar"
-wsl --export "Ubuntu-k3s" $tar {
+function Copy-RepoIntoWsl {
     param(
         [Parameter(Mandatory = $true)][string]$DestinationPath,
-        [Parameter(Mandatory = $true)][string]$OwnerUser
+        [string]$OwnerUser
     )
 
     $destinationLiteral = ConvertTo-BashLiteral -Value $DestinationPath
-    if ($OwnerUser -notmatch '^[a-z_][a-z0-9_-]*$') {
-        throw "Invalid Linux username for ownership: $OwnerUser"
-    }
-
-    if ($OwnerUser -eq 'root') {
-        Invoke-WslCommand -AsRoot -Command "mkdir -p $destinationLiteral"
-    }
-    else {
-        Invoke-WslCommand -AsRoot -Command "mkdir -p $destinationLiteral && chown -R $OwnerUser`:$OwnerUser $destinationLiteral"
-    }
+    # Ensure directory exists inside WSL
+    Invoke-WslCommand -AsRoot -Command "mkdir -p $destinationLiteral"
 
     $uncDestination = Convert-LinuxPathToUnc -LinuxPath $DestinationPath
     Write-Log "Mirroring repo into WSL path: $DestinationPath"
     $null = New-Item -ItemType Directory -Path $uncDestination -Force
 
+    # If provided, attempt to set ownership inside WSL before copying so Windows can write
+    if (-not [string]::IsNullOrWhiteSpace($OwnerUser)) {
+        if ($OwnerUser -notmatch '^[a-z_][a-z0-9_-]*$') {
+            throw "Invalid Linux username for ownership: $OwnerUser"
+        }
+
+        if ($OwnerUser -ne 'root') {
+            $destLit = ConvertTo-BashLiteral -Value $DestinationPath
+            Write-Log "Attempting to set ownership of $DestinationPath to $OwnerUser inside WSL"
+            try {
+                Invoke-WslCommand -AsRoot -Command "mkdir -p $destLit && chown -R $OwnerUser`:$OwnerUser $destLit"
+            }
+            catch {
+                Write-Log "WARNING: could not set ownership in WSL: $_"
+            }
+        }
+    }
+
     $roboArgs = @(
         $RepoRoot,
         $uncDestination,
         '/MIR',
+        '/XF',
+        'curl-probe.log',
         '/R:2',
         '/W:2',
         '/FFT',
@@ -296,8 +306,23 @@ wsl --export "Ubuntu-k3s" $tar {
 
     & robocopy.exe @roboArgs | Out-Host
     $code = $LASTEXITCODE
+
     if ($code -gt 7) {
-        throw "robocopy failed with exit code $code"
+        Write-Log "robocopy failed with exit code $code; attempting backup-mode retry (/B)"
+
+        $roboArgsBackup = $roboArgs + '/B'
+        & robocopy.exe @roboArgsBackup | Out-Host
+        $code2 = $LASTEXITCODE
+
+        if ($code2 -gt 7) {
+            throw "robocopy failed after backup-mode retry with exit code $code2"
+        }
+    }
+
+    # Ensure ownership after copy
+    if (-not [string]::IsNullOrWhiteSpace($OwnerUser) -and $OwnerUser -ne 'root') {
+        $destLit = ConvertTo-BashLiteral -Value $DestinationPath
+        Invoke-WslCommand -AsRoot -Command "chown -R $OwnerUser`:$OwnerUser $destLit"
     }
 }
 
@@ -1802,8 +1827,8 @@ function Main {
     $defaultDistroAtStart = Get-DefaultWslDistro
     Write-Log "Default distro at start: $defaultDistroAtStart"
 
-    Write-Step 'Provisional reset of dedicated k3s distro'
-    Reset-DedicatedDistro -DedicatedDistroName 'Ubuntu-k3s'
+    Write-Step 'Ensuring dedicated k3s distro exists'
+    Write-Log "Skipping unconditional removal of 'Ubuntu-k3s'; the script will create it if missing"
 
     if ($DiagnosticsOnly) {
         Write-Step 'Running diagnostics only'
@@ -1884,8 +1909,10 @@ function Main {
         if (Test-Path -LiteralPath $startCmdPath) {
             Write-Log "Starting persistent WSL session helper: $startCmdPath"
             try {
-                Start-Process -FilePath $startCmdPath -WindowStyle Normal -ErrorAction Stop | Out-Null
-                Write-Log 'Started start_ubuntu_k3s.cmd successfully'
+                # Launch via cmd.exe /c start "" so the helper runs in a detached Windows cmd window
+                $cmdArgs = "/c start "" `"$startCmdPath`""
+                Start-Process -FilePath 'cmd.exe' -ArgumentList $cmdArgs -WindowStyle Normal -ErrorAction Stop | Out-Null
+                Write-Log 'Launched start_ubuntu_k3s.cmd in a new Windows command window'
             }
             catch {
                 Write-Log "WARNING: Could not start start_ubuntu_k3s.cmd: $_"
