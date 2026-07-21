@@ -20,3 +20,20 @@ scripts/git_push_with_pat.sh
 config/
 tests/
 shares/
+
+# Ignored unreferenced scripts (kept run_windows_setup.* tracked)
+scripts/configure_freelens_kubeconfig.ps1
+scripts/contamination-marker-injector.cmd
+scripts/contamination-marker-injector.ps1
+scripts/distro-contamination-detector.cmd
+scripts/distro-contamination-detector.ps1
+scripts/install_samba.sh
+scripts/k3s_setup.ps1
+scripts/post_clone_part1.ps1
+scripts/post_clone_part2.ps1
+scripts/post_clone_part3.ps1
+scripts/post_clone_windows_setup_v2.ps1
+scripts/post_k3s_samba_verification.ps1
+scripts/pre_k3s_setup.ps1
+scripts/restore_after_reboot.sh
+scripts/run_all_stages.ps1

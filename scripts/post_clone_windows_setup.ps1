@@ -1904,7 +1904,7 @@ function Main {
 
     Write-Step 'Completed'
     # Attempt to start the persistent WSL session helper on Windows (if present)
-    try {
+    <#try {
         $startCmdPath = Join-Path $PSScriptRoot 'start_ubuntu_k3s.cmd'
         if (Test-Path -LiteralPath $startCmdPath) {
             Write-Log "Starting persistent WSL session helper: $startCmdPath"
@@ -1924,7 +1924,7 @@ function Main {
     }
     catch {
         Write-Log "WARNING: Unexpected error while attempting to start persistent WSL helper: $_"
-    }
+    }#>
     $defaultDistroAtEnd = Get-DefaultWslDistro
     Write-Log "Default distro at end: $defaultDistroAtEnd"
     Write-Host "`n======================================================" -ForegroundColor Green

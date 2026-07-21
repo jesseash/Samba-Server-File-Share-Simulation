@@ -1,99 +1,19 @@
-# Samba Server File Share Simulation
 
-A simulation project that mirrors the file structure, scripts, and local dependencies of a Samba file-sharing server environment on Linux.
+In this release what we're after is far from perfection but reporoducibilty. At the end of the day if we can get the same exact result on everyones machine good or bad then abstractions be dammed we will have accomplished something. An identical result good or bad leads to a system which is reporducible and therefore buildable, which is the foundation of all good architecture
 
-## Overview
+This is fully self- contained bascis file samba file share simulation system. There are no external dependencies save for those which I have stored in the github release repository for the samba server and client including the ubuntu base image that they are running in within the container runtime evnvironment (cre- in this case containerd). The docker images for both samaba client and server are built locally by the installation script and the . The accessibility of these images as well as the depedencies is questionable. On docker images are often renamed or removes and I've the same expereince with cloud or mirror repositories.
 
-This project provides a complete, reproducible setup for a Samba file server simulation, including:
+There is the risk of wsl2 vm layer courruption when two or more cres are installed on a single distro. I understand many sw engineers use docker desktop which often uses the wsl2 default distro. Docker, Podman, Rancher, Minikube, and Colima 
 
-- **Installation** scripts for Samba packages
-- **Configuration** of shared directories and Samba settings
-- **User management** for both system and Samba accounts
-- **Service management** to start/stop/restart Samba daemons
-- **Public and private** share directories
-- **Documentation** for step-by-step setup and usage
-- **Tests** to validate share access
+These CREs all attempt to control the same subsystems:
 
-## Repository Structure
+    cgroups (v1/v2 mode, hierarchy mounts)
 
-```
-Samba-Server-File-Share-Simulation/
-├── README.md
-├── config/
-│   └── smb.conf               # Example Samba configuration file
-├── docs/
-│   └── setup_guide.md         # Step-by-step setup guide
-├── scripts/
-│   ├── install_samba.sh       # Install Samba packages
-│   ├── configure_samba.sh     # Configure shares and apply smb.conf
-│   ├── create_samba_user.sh   # Create a Samba user account
-│   └── restart_services.sh    # Restart smbd/nmbd services
-├── shares/
-│   ├── public_share/          # Publicly accessible share directory
-│   │   └── .gitkeep
-│   └── private_share/         # Password-protected share directory
-│       └── .gitkeep
-└── tests/
-    └── share_access_test.sh   # Smoke test for share accessibility
-```
+    containerd (socket ownership, runtime shims)
 
-## Quick Start
+    iptables (NAT, MASQUERADE, bridge rules)
 
-1. **Install Samba:**
-   ```bash
-   bash scripts/install_samba.sh
-   ```
+    systemd (unit files, service dependencies)
 
-2. **Configure shares:**
-   ```bash
-   bash scripts/configure_samba.sh
-   ```
-
-3. **Create a Samba user** *(required for private share access)*:
-   ```bash
-   bash scripts/create_samba_user.sh
-   ```
-
-4. **Restart Samba services:**
-   ```bash
-   bash scripts/restart_services.sh
-   ```
-
-5. **Run tests:**
-   ```bash
-   bash tests/share_access_test.sh
-   ```
-
-## Connecting to Shares
-
-| Share          | Path                            | Access      |
-|----------------|---------------------------------|-------------|
-| public_share   | `\\<server_ip>\public_share`   | Guest/open  |
-| private_share  | `\\<server_ip>\private_share`  | Credentials |
-
-### Linux client example
-```bash
-# Mount public share
-sudo mount -t cifs //<server_ip>/public_share /mnt/public -o guest
-
-# Mount private share
-sudo mount -t cifs //<server_ip>/private_share /mnt/private -o username=<samba_user>
-```
-
-### Windows client
-Open **File Explorer** and type `\\<server_ip>` in the address bar.
-
-## Requirements
-
-- Ubuntu 20.04+ / Debian 10+ (or compatible distro with `apt`)
-- `sudo` privileges
-- `samba`, `samba-common-bin`, `cifs-utils` (installed by `install_samba.sh`)
-
-## Uploading Your Own Project
-
-Want to replace the placeholder files with your actual Samba project?
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for copy-paste Git commands to upload your whole local directory.
-
-## License
-
-MIT
+    mount namespaces (overlayfs, cgroup mounts, /run)
+The cres will all inevitabley compete for the same  shared kernel‑level resources  allowed to them by them by the vm, corruption at the vm layer is inevevitable. To prevent this from happening, a user accidentally installing k3s on the distro with another cre, I made the script create another dedicated k3s distro. It will shutdown the current default distro and then install a dedicated Ubuntu k3s distro.  
