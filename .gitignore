@@ -37,3 +37,7 @@ scripts/post_k3s_samba_verification.ps1
 scripts/pre_k3s_setup.ps1
 scripts/restore_after_reboot.sh
 scripts/run_all_stages.ps1
+
+# Added by assistant to untrack local-only docs and root file
+/docs/
+/CONTRIBUTING.md
